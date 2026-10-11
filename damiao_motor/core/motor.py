@@ -201,6 +201,9 @@ KD_MAX = 5.0
 # [PMAX, VMAX, TMAX] per motor type (Limit_Param table)
 _MOTOR_LIMIT_PARAM: List[Tuple[str, List[float]]] = [
     ("3507", [12.566, 50, 5]),
+    # DM-S3519-1EC values read from the target motor's mapping registers
+    # (PMAX/VMAX/TMAX, register IDs 21-23).
+    ("DM3519", [12.5, 200, 10]),
     ("4310", [12.5, 30, 10]),
     ("4310P", [12.5, 50, 10]),
     ("4340", [12.5, 10, 28]),
@@ -232,6 +235,21 @@ def _build_preset(pmax: float, vmax: float, tmax: float) -> Dict[str, float]:
 MOTOR_TYPE_PRESETS: Dict[str, Dict[str, float]] = {
     name: _build_preset(p, v, t) for name, (p, v, t) in _MOTOR_LIMIT_PARAM
 }
+
+CONTROL_MODE_CODES: Dict[str, int] = {
+    "MIT": 1,
+    "POS_VEL": 2,
+    "VEL": 3,
+    "FORCE_POS": 4,
+}
+
+# Most existing presets retain the driver's historic four-mode behavior.
+# The DM-S3519-1EC manual lists MIT, position, and velocity control, but does
+# not document FORCE_POS, so that mode is deliberately unavailable.
+MOTOR_TYPE_SUPPORTED_CONTROL_MODES: Dict[str, Tuple[str, ...]] = {
+    name: tuple(CONTROL_MODE_CODES) for name in MOTOR_TYPE_PRESETS
+}
+MOTOR_TYPE_SUPPORTED_CONTROL_MODES["DM3519"] = ("MIT", "POS_VEL", "VEL")
 
 _LIMITS_KEYS = ("p_min", "p_max", "v_min", "v_max", "t_min", "t_max")
 
@@ -354,6 +372,23 @@ class DaMiaoMotor:
         for k in _LIMITS_KEYS:
             setattr(self, f"_{k}", base[k])
         self.motor_type = motor_type
+
+    def supported_control_modes(self) -> Tuple[str, ...]:
+        """Return control modes documented for the selected motor preset."""
+        return MOTOR_TYPE_SUPPORTED_CONTROL_MODES[self.motor_type]
+
+    def _validate_control_mode(self, control_mode: str) -> None:
+        if control_mode not in CONTROL_MODE_CODES:
+            raise ValueError(
+                f"Invalid control_mode: {control_mode}. "
+                f"Must be one of {list(CONTROL_MODE_CODES)}"
+            )
+        supported = self.supported_control_modes()
+        if control_mode not in supported:
+            raise ValueError(
+                f"Control mode {control_mode} is not documented for motor type "
+                f"{self.motor_type}. Supported modes: {list(supported)}"
+            )
 
     def get_states(self) -> Dict[str, Any]:
         """
@@ -523,12 +558,8 @@ class DaMiaoMotor:
             TimeoutError: If reading/writing register times out
             RuntimeError: Other errors during register operations, or if verification after write fails
         """
-        mode_to_register = {"MIT": 1, "POS_VEL": 2, "VEL": 3, "FORCE_POS": 4}
-        if control_mode not in mode_to_register:
-            raise ValueError(
-                f"Invalid control_mode: {control_mode}. Must be one of {list(mode_to_register.keys())}"
-            )
-        desired = mode_to_register[control_mode]
+        self._validate_control_mode(control_mode)
+        desired = CONTROL_MODE_CODES[control_mode]
 
         try:
             current = int(self.get_register(10, timeout=1.0))
@@ -615,6 +646,7 @@ class DaMiaoMotor:
             Documentation: [MIT mode](https://jia-xie.github.io/python-damiao-driver/dev/concept/motor-control-modes/#mit-mode) and
             [Communication Protocol message types](https://jia-xie.github.io/python-damiao-driver/dev/concept/communication-protocol/#message-types).
         """
+        self._validate_control_mode("MIT")
         self._check_motor_status()
         data = self.encode_cmd_msg(
             target_position, target_velocity, feedforward_torque, stiffness, damping
@@ -639,6 +671,7 @@ class DaMiaoMotor:
             Documentation: [POS_VEL mode](https://jia-xie.github.io/python-damiao-driver/dev/concept/motor-control-modes/#pos-vel-mode) and
             [Communication Protocol message types](https://jia-xie.github.io/python-damiao-driver/dev/concept/communication-protocol/#message-types).
         """
+        self._validate_control_mode("POS_VEL")
         self._check_motor_status()
         # POS_VEL Mode: CAN ID 0x100 + motor_id
         data = struct.pack("<ff", target_position, velocity_limit)
@@ -661,6 +694,7 @@ class DaMiaoMotor:
             Documentation: [VEL mode](https://jia-xie.github.io/python-damiao-driver/dev/concept/motor-control-modes/#vel-mode) and
             [Communication Protocol message types](https://jia-xie.github.io/python-damiao-driver/dev/concept/communication-protocol/#message-types).
         """
+        self._validate_control_mode("VEL")
         self._check_motor_status()
         # VEL Mode: CAN ID 0x200 + motor_id
         data = struct.pack("<f", target_velocity) + b"\x00" * 4
@@ -692,6 +726,7 @@ class DaMiaoMotor:
             Documentation: [FORCE_POS mode](https://jia-xie.github.io/python-damiao-driver/dev/concept/motor-control-modes/#force-pos-mode) and
             [Communication Protocol message types](https://jia-xie.github.io/python-damiao-driver/dev/concept/communication-protocol/#message-types).
         """
+        self._validate_control_mode("FORCE_POS")
         self._check_motor_status()
         # FORCE_POS Mode: CAN ID 0x300 + motor_id
         # Clamp and scale velocity limit (0-100 rad/s -> 0-10000)

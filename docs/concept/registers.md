@@ -171,6 +171,7 @@ for register_id, info in REGISTER_TABLE.items():
 | Motor type | PMAX | VMAX | TMAX |
 |------------|------|------|------|
 | `3507` | 12.566 | 50 | 5 |
+| `DM3519` | 12.5 | 200 | 10 |
 | `4310` | 12.5 | 30 | 10 |
 | `4310P` | 12.5 | 50 | 10 |
 | `4340` | 12.5 | 10 | 28 |
@@ -185,6 +186,11 @@ for register_id, info in REGISTER_TABLE.items():
 | `H6220` | 12.5 | 45 | 10 |
 | `JH11` | 12.5 | 10 | 12 |
 | `6248P` | 12.566 | 20 | 120 |
+
+`DM3519` uses the mapping values read from the target DM-S3519-1EC registers.
+Its published manual documents MIT, position, and velocity modes; therefore the
+driver exposes `MIT`, `POS_VEL`, and `VEL` for this preset and intentionally
+rejects undocumented `FORCE_POS` commands.
 
 | ID | Variable | Description | Access | Range | Type |
 |----|----------|-------------|--------|-------|------|

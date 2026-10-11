@@ -240,6 +240,7 @@ def create_app(studio: Studio) -> Flask:
         return jsonify({"success": True, **_platform_defaults()})
 
     @app.route("/api/motor-types")
+    @app.route("/api/monitor/motor-types")
     def motor_types():
         from damiao_motor.monitor.decode import MONITOR_MOTOR_PRESETS
 

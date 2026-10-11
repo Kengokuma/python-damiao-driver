@@ -717,12 +717,15 @@ def cmd_gui(args) -> None:
             - debug: Enable debug mode (default: False)
             - production: Use production WSGI server (default: False)
     """
-    # `gui` now launches the unified DaMiao Studio in control mode (active control +
-    # the realtime monitor in one UI). The legacy Flask GUI remains in web_gui.py.
-    from damiao_motor.monitor import server as studio_server
+    # Keep the established control-oriented Web GUI for ``damiao gui``.  The
+    # realtime Studio remains available through ``damiao monitor``.
+    from damiao_motor.gui import web_gui
 
-    studio_server.run_server(
-        host=args.host, port=args.port, mode="control", debug=args.debug
+    web_gui.run_server(
+        host=args.host,
+        port=args.port,
+        debug=args.debug,
+        production=args.production,
     )
 
 

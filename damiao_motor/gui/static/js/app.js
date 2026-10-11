@@ -768,6 +768,7 @@ let currentMotorId = null;
 
             // Update control visibility and write register 10 (CTRL_MODE) when mode changes
             document.getElementById('controlMode').addEventListener('change', onControlModeChange);
+            applySupportedControlModes(motorType);
             updateControlVisibility();
             
             // Initialize frequency row visibility based on toggle state
@@ -1572,6 +1573,20 @@ let currentMotorId = null;
             docsLink.title = `View ${mode} mode documentation`;
         }
 
+        function applySupportedControlModes(motorType) {
+            const modeSelect = document.getElementById('controlMode');
+            if (!modeSelect) return;
+            const byType = window.motorTypeControlModes || {};
+            const supported = byType[motorType] || Object.keys(CTRL_MODE_CODE);
+            Array.from(modeSelect.options).forEach(option => {
+                option.disabled = !supported.includes(option.value);
+                option.title = option.disabled ? `Not documented for ${motorType}` : '';
+            });
+            if (!supported.includes(modeSelect.value)) {
+                modeSelect.value = supported[0] || 'MIT';
+            }
+        }
+
         async function onControlModeChange() {
             updateControlVisibility();
             if (!currentMotorId) return;
@@ -1945,6 +1960,8 @@ let currentMotorId = null;
                 });
                 const data = await response.json();
                 if (data.success) {
+                    applySupportedControlModes(motorType);
+                    updateControlVisibility();
                     showStatus('Motor type updated to ' + motorType, 'success');
                 } else {
                     showStatus('Failed to set motor type: ' + (data.error || 'Unknown error'), 'error');
@@ -2019,9 +2036,12 @@ let currentMotorId = null;
                 const data = await response.json();
                 const types = data.success && data.types ? data.types : ['4310'];
                 window.motorTypes = types;
+                window.motorTypeControlModes = data.success && data.supported_control_modes
+                    ? data.supported_control_modes : {};
             } catch (e) {
                 console.warn('Could not load motor types:', e);
                 window.motorTypes = ['4310'];
+                window.motorTypeControlModes = {};
             }
         }
 

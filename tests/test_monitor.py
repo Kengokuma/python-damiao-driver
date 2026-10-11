@@ -228,3 +228,15 @@ def test_listener_source_has_no_send_call():
     with open(lst.__file__) as f:
         src = f.read()
     assert ".send(" not in src
+
+
+def test_studio_motor_type_endpoint_used_by_webapp_includes_dm3519():
+    """The React Studio fetches this compatibility route during startup."""
+    from damiao_motor.monitor.server import create_app
+    from damiao_motor.monitor.service import MonitorService
+
+    app = create_app(MonitorService(channel="can_test"))
+    response = app.test_client().get("/api/monitor/motor-types")
+
+    assert response.status_code == 200
+    assert "DM3519" in response.get_json()["types"]

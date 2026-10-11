@@ -261,6 +261,7 @@ Examples:
                 type=str,
                 default="4340",
                 choices=[
+                    "DM3519",
                     "4310",
                     "4310P",
                     "4340",
@@ -348,6 +349,7 @@ Examples:
         type=str,
         default="4310",
         choices=[
+            "DM3519",
             "4310",
             "4310P",
             "4340",

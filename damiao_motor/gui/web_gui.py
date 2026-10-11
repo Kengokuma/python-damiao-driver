@@ -8,7 +8,12 @@ from typing import Dict, Any, Optional
 from flask import Flask, render_template, jsonify, request
 
 from damiao_motor.core.controller import DaMiaoController
-from damiao_motor.core.motor import REGISTER_TABLE, MOTOR_TYPE_PRESETS
+from damiao_motor.core.motor import (
+    CONTROL_MODE_CODES,
+    MOTOR_TYPE_PRESETS,
+    MOTOR_TYPE_SUPPORTED_CONTROL_MODES,
+    REGISTER_TABLE,
+)
 
 import os
 
@@ -141,7 +146,13 @@ def list_can_interfaces():
 @app.route("/api/motor-types", methods=["GET"])
 def get_motor_types():
     """Return list of supported motor type presets (e.g. 4340, 4310)."""
-    return jsonify({"success": True, "types": list(MOTOR_TYPE_PRESETS.keys())})
+    return jsonify(
+        {
+            "success": True,
+            "types": list(MOTOR_TYPE_PRESETS.keys()),
+            "supported_control_modes": MOTOR_TYPE_SUPPORTED_CONTROL_MODES,
+        }
+    )
 
 
 @app.route("/api/connect", methods=["POST"])
@@ -376,6 +387,26 @@ def set_register(motor_id: int, rid: int):
 
         motor = _motors[motor_id]
 
+        if rid == 10:
+            try:
+                requested_mode = next(
+                    mode for mode, code in CONTROL_MODE_CODES.items() if code == int(value)
+                )
+            except (StopIteration, TypeError, ValueError):
+                return jsonify(
+                    {"success": False, "error": f"Invalid CTRL_MODE value: {value}"}
+                ), 400
+            if requested_mode not in motor.supported_control_modes():
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Control mode {requested_mode} is not documented for "
+                            f"motor type {motor.motor_type}"
+                        ),
+                    }
+                ), 400
+
         if rid == TIMEOUT_REGISTER_ID:
             register_value = _timeout_ms_to_register_units(value)
             motor.write_register(rid, register_value)
@@ -538,8 +569,21 @@ def send_motor_command(motor_id: int):
 
         motor = _motors[motor_id]
 
-        # Get command parameters
+        # Validate the requested mode before any CAN command is sent.
         control_mode = data.get("control_mode", "MIT")
+
+        if control_mode not in motor.supported_control_modes():
+            return jsonify(
+                {
+                    "success": False,
+                    "error": (
+                        f"Control mode {control_mode} is not documented for motor "
+                        f"type {motor.motor_type}"
+                    ),
+                }
+            ), 400
+
+        # Get command parameters
         target_position = data.get("target_position", 0.0)
         target_velocity = data.get("target_velocity", 0.0)
         stiffness = data.get("stiffness", 0.0)
